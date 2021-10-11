@@ -2,7 +2,10 @@ package tls
 
 import (
 	ctls "crypto/tls"
+	"strconv"
+	"strings"
 
+	"github.com/caddyserver/certmagic"
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
@@ -85,6 +88,52 @@ func parseTLS(c *caddy.Controller) error {
 		setTLSDefaults(tls)
 
 		config.TLSConfig = tls
+	}
+	return nil
+}
+
+func parseAcme(c *caddy.Controller) error {
+	for c.NextBlock() {
+		switch c.Val() {
+		case "acme":
+			for c.Next() {
+				for c.NextBlock() {
+					term := strings.ToLower(c.Val())
+					var acmeTemplate certmagic.ACMEManager
+					switch term {
+					case DOMAIN:
+						args := c.RemainingArgs()
+						if len(args) > 1 {
+							return c.Errf("unexpected number of arguments: %#v", args)
+						}
+					case CHALLENGE:
+						args := c.RemainingArgs()
+						challenge := args[0]
+						if !(len(args) == 3 && args[1] == PORT) {
+							return acmeTemplate, zoneName, c.Errf("unexpected number of arguments: %#v", args)
+						}
+						port, err := strconv.Atoi(args[2])
+						if err != nil {
+							return acmeTemplate, zoneName, c.Errf("%s port is not an int: %#v", challenge, args)
+						}
+						switch challenge {
+						case HTTPChallenge:
+							acmeTemplate.AltHTTPPort = port
+							acmeTemplate.DisableHTTPChallenge = false
+						case TLPSALPNChallenge:
+							acmeTemplate.AltTLSALPNPort = port
+							acmeTemplate.DisableTLSALPNChallenge = false
+						default:
+							return c.Errf("unexpected challenge %s: challenge should only be tlsalpn or http", challenge)
+						}
+					default:
+						return c.Errf("unexpected term: %s: term should only be challenge or domain", term)
+					}
+				}
+			}
+		default:
+			return c.Errf("unknown option '%s'", c.Val())
+		}
 	}
 	return nil
 }
