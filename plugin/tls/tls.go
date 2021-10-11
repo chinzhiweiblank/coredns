@@ -93,6 +93,7 @@ func parseTLS(c *caddy.Controller) error {
 }
 
 func parseAcme(c *caddy.Controller) error {
+	var zone string
 	for c.NextBlock() {
 		switch c.Val() {
 		case "acme":
@@ -101,20 +102,15 @@ func parseAcme(c *caddy.Controller) error {
 					term := strings.ToLower(c.Val())
 					var acmeTemplate certmagic.ACMEManager
 					switch term {
-					case DOMAIN:
-						args := c.RemainingArgs()
-						if len(args) > 1 {
-							return c.Errf("unexpected number of arguments: %#v", args)
-						}
 					case CHALLENGE:
 						args := c.RemainingArgs()
 						challenge := args[0]
 						if !(len(args) == 3 && args[1] == PORT) {
-							return acmeTemplate, zoneName, c.Errf("unexpected number of arguments: %#v", args)
+							return c.Errf("unexpected number of arguments: %#v", args)
 						}
 						port, err := strconv.Atoi(args[2])
 						if err != nil {
-							return acmeTemplate, zoneName, c.Errf("%s port is not an int: %#v", challenge, args)
+							return c.Errf("%s port is not an int: %#v", challenge, args)
 						}
 						switch challenge {
 						case HTTPChallenge:
@@ -127,6 +123,10 @@ func parseAcme(c *caddy.Controller) error {
 							return c.Errf("unexpected challenge %s: challenge should only be tlsalpn or http", challenge)
 						}
 					default:
+						return c.Errf("unexpected term: %s: term should only be challenge or domain", term)
+					}
+					_, err := doACME(acmeTemplate, zone)
+					if err != nil {
 						return c.Errf("unexpected term: %s: term should only be challenge or domain", term)
 					}
 				}
