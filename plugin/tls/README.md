@@ -35,6 +35,18 @@ The option value corresponds to the [ClientAuthType values of the Go tls package
 The default is "nocert".  Note that it makes no sense to specify parameter CA unless this option is
 set to verify\_if\_given or require\_and\_verify.
 
+~~~ txt
+tls CERT KEY [CA] {
+    client_auth nocert|request|require|verify_if_given|require_and_verify
+}
+~~~
+You can also try the ACME protocol.
+
+~~~ txt
+tls CERT KEY [CA] {
+    client_auth nocert|request|require|verify_if_given|require_and_verify
+}
+~~~
 ## Examples
 
 Start a DNS-over-TLS server that picks up incoming DNS-over-TLS queries on port 5553 and uses the
