@@ -50,6 +50,12 @@ func parseTLS(c *caddy.Controller) error {
 		if len(args) < 2 || len(args) > 3 {
 			return plugin.Error("tls", c.ArgErr())
 		}
+
+		tls, err := tls.NewTLSConfigFromArgs(args...)
+		if err != nil {
+			return err
+		}
+
 		clientAuth := ctls.NoClientCert
 		for c.NextBlock() {
 			switch c.Val() {
@@ -72,13 +78,20 @@ func parseTLS(c *caddy.Controller) error {
 				default:
 					return c.Errf("unknown authentication type '%s'", authTypeArgs[0])
 				}
+			case "acme":
+				acmeTemplate, err := parseAcme(c)
+				if err != nil {
+					return c.Errf("acme configuration error :%s", err.Error())
+				}
+				cert, err := doACME(acmeTemplate, config.Zone)
+				if err != nil {
+					return c.Errf("acme protocol error :%s", err.Error())
+				}
+				tls.Certificates = append(tls.Certificates, cert.Certificate)
+
 			default:
 				return c.Errf("unknown option '%s'", c.Val())
 			}
-		}
-		tls, err := tls.NewTLSConfigFromArgs(args...)
-		if err != nil {
-			return err
 		}
 		tls.ClientAuth = clientAuth
 		// NewTLSConfigFromArgs only sets RootCAs, so we need to let ClientCAs refer to it.
