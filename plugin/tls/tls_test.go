@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/caddyserver/certmagic"
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 )
@@ -32,6 +33,45 @@ func TestTLS(t *testing.T) {
 
 		if test.shouldErr && err == nil {
 			t.Errorf("Test %d: Expected error but found %s for input %s", i, err, test.input)
+		}
+
+		if err != nil {
+			if !test.shouldErr {
+				t.Errorf("Test %d: Expected no error but found one for input %s. Error was: %v", i, test.input, err)
+			}
+
+			if !strings.Contains(err.Error(), test.expectedErrContent) {
+				t.Errorf("Test %d: Expected error to contain: %v, found error: %v, input: %s", i, test.expectedErrContent, err, test.input)
+			}
+		}
+	}
+}
+
+func TestAcme(t *testing.T) {
+	compareAcmeTemplate := func(a certmagic.ACMEManager, b certmagic.ACMEManager) bool {
+		return a.AltHTTPPort == b.AltHTTPPort && a.AltTLSALPNPort == b.AltTLSALPNPort && a.DisableHTTPChallenge == b.DisableHTTPChallenge && a.DisableTLSALPNChallenge == b.DisableTLSALPNChallenge
+	}
+	tests := []struct {
+		input                string
+		shouldErr            bool
+		expectedAcmeTemplate certmagic.ACMEManager
+		expectedErrContent   string
+	}{
+		{"acme", false, certmagic.ACMEManager{DisableHTTPChallenge: true, DisableTLSALPNChallenge: true}, ""},
+		{"acme {\nhttp 90\n}", false, certmagic.ACMEManager{AltHTTPPort: 90, DisableHTTPChallenge: false, DisableTLSALPNChallenge: true}, ""},
+		{"acme {\ntlsalpn 100\n}", false, certmagic.ACMEManager{AltTLSALPNPort: 100, DisableHTTPChallenge: true, DisableTLSALPNChallenge: false}, ""},
+	}
+
+	for i, test := range tests {
+		c := caddy.NewTestController("dns", test.input)
+		acmeTemplate, err := parseAcme(c)
+
+		if test.shouldErr && err == nil {
+			t.Errorf("Test %d: Expected error but found %s for input %s", i, err, test.input)
+		}
+
+		if !test.shouldErr && !compareAcmeTemplate(acmeTemplate, test.expectedAcmeTemplate) {
+			t.Errorf("Test %d: Expected %+v but found %+v for input %+v", i, test.expectedAcmeTemplate, acmeTemplate, test.input)
 		}
 
 		if err != nil {

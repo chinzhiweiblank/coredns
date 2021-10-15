@@ -3,7 +3,6 @@ package tls
 import (
 	ctls "crypto/tls"
 	"strconv"
-	"strings"
 
 	"github.com/caddyserver/certmagic"
 	"github.com/coredns/caddy"
@@ -78,8 +77,6 @@ func parseTLS(c *caddy.Controller) error {
 			}
 		}
 		tls, err := tls.NewTLSConfigFromArgs(args...)
-		cert, _ := parseAcme(c)
-		tls.Certificates = append(tls.Certificates, cert.Certificate)
 		if err != nil {
 			return err
 		}
@@ -94,49 +91,41 @@ func parseTLS(c *caddy.Controller) error {
 	return nil
 }
 
-func parseAcme(c *caddy.Controller) (certmagic.Certificate, error) {
-	var zone string
-	var cert certmagic.Certificate
-	for c.NextBlock() {
-		switch c.Val() {
-		case "acme":
-			for c.Next() {
-				for c.NextBlock() {
-					term := strings.ToLower(c.Val())
-					var acmeTemplate certmagic.ACMEManager
-					switch term {
-					case "challenge":
-						args := c.RemainingArgs()
-						challenge := args[0]
-						if !(len(args) == 3 && args[1] == PORT) {
-							return c.Errf("unexpected number of arguments: %#v", args)
-						}
-						port, err := strconv.Atoi(args[2])
-						if err != nil {
-							return c.Errf("%s port is not an int: %#v", challenge, args)
-						}
-						switch challenge {
-						case "http":
-							acmeTemplate.AltHTTPPort = port
-							acmeTemplate.DisableHTTPChallenge = false
-						case "tlsalpn":
-							acmeTemplate.AltTLSALPNPort = port
-							acmeTemplate.DisableTLSALPNChallenge = false
-						default:
-							return c.Errf("unexpected challenge %s: challenge should only be tlsalpn or http", challenge)
-						}
-					default:
-						return c.Errf("unexpected term: %s: term should only be challenge or domain", term)
-					}
-					cert, err := doACME(acmeTemplate, zone)
-					if err != nil {
-						return c.Errf("unexpected term: %s: term should only be challenge or domain", term)
-					}
-				}
+func parseAcme(c *caddy.Controller) (certmagic.ACMEManager, error) {
+	acmeTemplate := certmagic.ACMEManager{
+		DisableHTTPChallenge:    true,
+		DisableTLSALPNChallenge: true,
+	}
+	for c.Next() {
+		for c.NextBlock() {
+			challenge := c.Val()
+			args := c.RemainingArgs()
+			if len(args) > 1 {
+				return acmeTemplate, c.Errf("unexpected number of arguments: %v", args)
 			}
-		default:
-			return c.Errf("unknown option '%s'", c.Val())
+			switch challenge {
+			case "http":
+				if len(args) > 0 {
+					port, err := strconv.Atoi(args[0])
+					if err != nil {
+						return acmeTemplate, c.Errf("%s port is not an int: %v", challenge, args)
+					}
+					acmeTemplate.AltHTTPPort = port
+				}
+				acmeTemplate.DisableHTTPChallenge = false
+			case "tlsalpn":
+				if len(args) > 0 {
+					port, err := strconv.Atoi(args[0])
+					if err != nil {
+						return acmeTemplate, c.Errf("%s port is not an int: %v", challenge, args)
+					}
+					acmeTemplate.AltTLSALPNPort = port
+				}
+				acmeTemplate.DisableTLSALPNChallenge = false
+			default:
+				return acmeTemplate, c.Errf("unexpected challenge %s: challenge should only be tlsalpn or http", challenge)
+			}
 		}
 	}
-	return cert, nil
+	return acmeTemplate, nil
 }
